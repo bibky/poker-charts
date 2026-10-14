@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Турнирные префлоп-чарты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: control rail (situation → depth → positions → seat map) beside a 13×13 hand matrix; stacks on phones */
+:root{
+  --bg:#eef0eb; --surface:#f9faf7; --fg:#18201b; --muted:#5b665e; --line:#d2d8cf;
+  --accent:#1d4f6e; --accent-fg:#ffffff;
+  --a-raise:#c3412e; --a-shove:#6a2c83; --a-call:#2b8654; --a-limp:#c99a2e; --on-limp:#1f1a0b; --on-action:#ffffff;
+  --cell-fold:#e2e6de; --cell-fold-fg:#8b958c;
+  --felt:#d5e2d7; --felt-line:#b4c8b8; --vill:#c47524;
+  --f-display:"Unbounded","Golos Text",system-ui,sans-serif;
+  --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101412; --surface:#171c19; --fg:#e5eae4; --muted:#97a299; --line:#29312c;
+    --accent:#76aed3; --accent-fg:#0d1a22;
+    --a-raise:#d9583f; --a-shove:#9a52b8; --a-call:#33a066; --a-limp:#d4a53c; --on-limp:#1f1a0b; --on-action:#ffffff;
+    --cell-fold:#1f2622; --cell-fold-fg:#6c776f;
+    --felt:#1b2a21; --felt-line:#2c4334; --vill:#dc9142;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101412; --surface:#171c19; --fg:#e5eae4; --muted:#97a299; --line:#29312c;
+  --accent:#76aed3; --accent-fg:#0d1a22;
+  --a-raise:#d9583f; --a-shove:#9a52b8; --a-call:#33a066; --a-limp:#d4a53c; --on-limp:#1f1a0b; --on-action:#ffffff;
+  --cell-fold:#1f2622; --cell-fold-fg:#6c776f;
+  --felt:#1b2a21; --felt-line:#2c4334; --vill:#dc9142;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:28px 48px}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+header{display:flex;flex-direction:column;gap:6px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(24px,4vw,34px);line-height:1.15;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0;max-width:65ch}
+.app{display:grid;grid-template-columns:minmax(260px,330px) minmax(0,1fr);gap:28px;align-items:start}
+@media (max-width:820px){.app{grid-template-columns:minmax(0,1fr)}}
+.rail{display:flex;flex-direction:column;gap:22px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.field{display:flex;flex-direction:column;gap:8px}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+.seg{display:grid;gap:6px}
+.seg.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.seg.c1{grid-template-columns:minmax(0,1fr)}
+.seg.c8{grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.seg.c8 .btn{align-items:center;text-align:center;padding:7px 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.btn{font:inherit;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:7px;padding:7px 10px;text-align:left;
+  display:flex;flex-direction:column;gap:0;line-height:1.25;transition:background .12s,border-color .12s}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn .s{font-weight:600;font-size:14px}
+.btn .l{font-size:11.5px;color:var(--muted)}
+.btn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn[aria-pressed="true"] .l{color:var(--accent-fg);opacity:.8}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.seg.c3 .btn{align-items:center;text-align:center}
+.seatmap svg{width:100%;height:auto;display:block}
+.seatkey{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.seatkey i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+.panel{display:flex;flex-direction:column;gap:14px;min-width:0}
+.ptitle{display:flex;flex-direction:column;gap:4px}
+h2{font-family:var(--f-display);font-weight:500;font-size:clamp(17px,2.4vw,22px);margin:0;line-height:1.25;text-wrap:balance}
+.meta{font-size:13.5px;color:var(--muted);max-width:65ch;margin:0}
+.meta b{color:var(--fg);font-weight:600}
+.gridbox{max-width:600px;width:100%}
+.grid{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:2px;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.cell{aspect-ratio:1;max-width:100%;border:0;border-radius:3px;padding:0;cursor:pointer;font:inherit;font-weight:500;
+  font-size:clamp(8px,1.45vw,12.5px);display:flex;align-items:center;justify-content:center;background:var(--cell-fold);color:var(--cell-fold-fg)}
+.cell:focus-visible{outline:2px solid var(--fg);outline-offset:1px;z-index:1}
+.cell.raise{background:var(--a-raise);color:var(--on-action)}
+.cell.shove{background:var(--a-shove);color:var(--on-action)}
+.cell.call{background:var(--a-call);color:var(--on-action)}
+.cell.limp{background:var(--a-limp);color:var(--on-limp)}
+.cell.sel{outline:2px solid var(--fg);outline-offset:1px}
+.info{font-size:14px;min-height:22px;color:var(--muted)}
+.info b{color:var(--fg);font-family:var(--f-mono)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13.5px}
+.legend .it{display:flex;align-items:center;gap:8px}
+.legend .sw{width:14px;height:14px;border-radius:3px;flex:none}
+.legend .n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px}
+.sw.raise{background:var(--a-raise)} .sw.shove{background:var(--a-shove)} .sw.call{background:var(--a-call)} .sw.limp{background:var(--a-limp)} .sw.fold{background:var(--cell-fold);box-shadow:inset 0 0 0 1px var(--line)}
+.note{font-size:13.5px;border-left:3px solid var(--accent);padding:4px 0 4px 12px;max-width:65ch;color:var(--fg)}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:10px;padding:22px;max-width:600px}
+.empty p{margin:0 0 8px} .empty p:last-child{margin:0}
+
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;border-top:1px solid var(--line);padding-top:24px}
+.notes h3{font-family:var(--f-display);font-weight:500;font-size:15px;margin:0 0 8px}
+.notes ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--fg)}
+.notes li{max-width:65ch}
+.notes a{color:var(--accent);text-underline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Турнирные префлоп-чарты</h1>
+    <p class="sub">Турнир с BB-анте, от 3 до 10 игроков за столом. Выберите число игроков, ситуацию, глубину стека и позиции. Нажмите на клетку, чтобы увидеть руку и действие.</p>
+  </header>
+
+  <div class="app">
+    <aside class="rail" aria-label="Параметры">
+      <div class="field">
+        <span class="label">Игроков за столом</span>
+        <div class="seg c8" id="players"></div>
+      </div>
+      <div class="field">
+        <span class="label">Ситуация</span>
+        <div class="seg c1" id="tabs"></div>
+      </div>
+      <div class="field">
+        <span class="label">Глубина стека</span>
+        <div class="seg c3" id="depths"></div>
+      </div>
+      <div class="field" id="f1">
+        <span class="label" id="f1l"></span>
+        <div class="chips" id="f1c"></div>
+      </div>
+      <div class="field" id="f2">
+        <span class="label" id="f2l"></span>
+        <div class="chips" id="f2c"></div>
+      </div>
+      <div class="field seatmap">
+        <span class="label">Стол</span>
+        <div id="seatsvg"></div>
+        <div class="seatkey"><span><i style="background:var(--accent)"></i>Я</span><span id="vkey"><i style="background:var(--vill)"></i>Соперник</span></div>
+      </div>
+    </aside>
+
+    <section class="panel" aria-live="polite">
+      <div class="ptitle">
+        <h2 id="ptitle"></h2>
+        <p class="meta" id="pmeta"></p>
+      </div>
+      <div id="chartArea">
+        <div class="gridbox"><div class="grid" id="grid" role="grid" aria-label="Матрица стартовых рук"></div></div>
+      </div>
+      <div class="info" id="info">Нажмите на клетку</div>
+      <div class="legend" id="legend"></div>
+      <div class="note" id="pnote"></div>
+    </section>
+  </div>
+
+  <section class="notes">
+    <div>
+      <h3>Как читать матрицу</h3>
+      <ul>
+        <li>Над диагональю одномастные руки (s), под диагональю разномастные (o), на диагонали пары.</li>
+        <li>Процент в легенде считается от всех 1326 комбинаций: пара даёт 6 комбинаций, одномастная рука 4, разномастная 12.</li>
+        <li>Чарт открытия у каждого места свой. В ответах на открытие и на 3-бет ранние места объединены: UTG–UTG+2 полного стола играются одним чартом, MP и LJ другим.</li>
+        <li>Внутри диапазона глубины: у нижней границы шире пушите и уже коллируйте, у верхней наоборот.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Допущения</h3>
+      <ul>
+        <li>Место определяется тем, сколько игроков сидит после вас. BB-анте при любом числе игроков равно 1 bb, поэтому CO за столом на 4 игроков играет так же, как CO за полным столом. Соперники средней силы, расчёт без ICM. На баббле и за финальным столом сужайте коллы олл-инов.</li>
+        <li>Диапазоны упрощены до чистых действий и сверены по долям рук с опубликованными солверными и пуш/фолд-данными (см. справа). Это приближение, а не расчёт солвера.</li>
+        <li>Против тайтового соперника сужайте коллы и рестилы. Против лузового расширяйте 3-беты сильными руками.</li>
+        <li>Короткий стек в открытии играется пушем, поэтому раздела «против 3-бета» для него нет.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>С чем сверено</h3>
+      <ul>
+        <li><a href="https://www.pokerskill.com/charts/push-fold/" target="_blank" rel="noopener">Пуш/фолд 10 bb, 9-max, без анте</a> (по книге O'Kearney и Carter). С анте диапазоны шире.</li>
+        <li><a href="https://poker.academy/blog/post/bb-ante-explained-why-your-preflop-sims-are-costing-you-money" target="_blank" rel="noopener">Открытия 9-max на 20 bb с BB-анте и без</a>, защита BB против BTN.</li>
+        <li><a href="https://bbzpoker.com/preflop-strategy-tournament-poker/" target="_blank" rel="noopener">Открытия по позициям на 40 bb</a> и ширина защиты BB.</li>
+        <li><a href="https://gtopreflop.com/posts/blind-vs-blind-strategy" target="_blank" rel="noopener">Блайнд против блайнда</a>: доли лимпа, рейза и пуша из SB.</li>
+        <li><a href="https://www.pokernews.com/strategy/gto-wizard-when-to-open-shove-51945.htm" target="_blank" rel="noopener">GTO Wizard про пуш и мин-рейз на 20 bb</a>: рестил SB против BTN.</li>
+        <li>Отдельных турнирных чартов для коротких столов с BB-анте в открытом доступе не нашлось, они получены из мест полного стола.</li>
+        <li>Ответ на 3-бет (раздел 3) опубликованными числами не подтверждён.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ===== DATA ===== */
+const R="AKQJT98765432";
+const ACT={
+  raise:{n:"Рейз",c:"raise"}, shove:{n:"Пуш",c:"shove"},
+  threebet:{n:"3-бет",c:"raise"}, threebetShove:{n:"3-бет пуш",c:"shove"},
+  fourbet:{n:"4-бет / пуш",c:"shove"}, limp:{n:"Лимп",c:"limp"}, isoRaise:{n:"Изо-рейз",c:"raise"}, call:{n:"Колл",c:"call"}, callShove:{n:"Колл пуша",c:"call"}
+};
+const DATA={"open":{"long":{"b9":[["raise","55+, A8s+, A5s-A4s, KTs+, QTs+, JTs, T9s, ATo+, KJo+"]],"b8":[["raise","55+, A8s+, A5s-A3s, KTs+, Q9s+, J9s+, T9s, 98s, ATo+, KJo+"]],"b7":[["raise","55+, A7s+, A5s-A3s, K9s+, Q9s+, J9s+, T9s, 98s, ATo+, KJo+, QJo"]],"b6":[["raise","33+, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, 87s, ATo+, KJo+, QJo"]],"b5":[["raise","22+, A2s+, K8s+, Q9s+, J9s+, T8s+, 97s+, 87s, 76s, A9o+, KTo+, QTo+"]],"b4":[["raise","22+, A2s+, K6s+, Q8s+, J8s+, T8s+, 97s+, 86s+, 76s, 65s, A8o+, A5o, KTo+, QTo+, JTo"]],"b3":[["raise","22+, A2s+, K5s+, Q7s+, J7s+, T7s+, 96s+, 86s+, 75s+, 65s, A7o+, A5o, K9o+, Q9o+, J9o+, T9o"]],"b2":[["raise","22+, A2s+, K2s+, Q4s+, J6s+, T6s+, 95s+, 85s+, 74s+, 64s+, 53s+, A2o+, K7o+, Q8o+, J8o+, T8o+, 98o"]],"b1":[["raise","55+, A7s+, A5s-A2s, K9s+, QTs+, JTs, A8o+, KTo+, QJo"],["limp","44-22, A6s, K8s-K2s, Q9s-Q2s, J9s-J3s, T9s-T5s, 98s-95s, 87s-84s, 76s-74s, 65s-63s, 54s-53s, 43s, A7o-A2o, K9o-K4o, QTo-Q6o, JTo-J7o, T9o-T7o, 98o-97o, 87o-86o, 76o-75o, 65o, K3o-K2o, Q5o-Q2o, J6o-J5o, T6o, 96o-95o, 85o, 74o, 64o, 54o, 94s-92s, 83s-82s, 73s, 62s, 52s, 42s, 32s, J2s, T4s-T2s"]]},"medium":{"b9":[["raise","66+, A9s+, A5s, KTs+, QTs+, JTs, ATo+, KJo+"]],"b8":[["raise","55+, A8s+, A5s-A4s, KTs+, QTs+, JTs, ATo+, KJo+"]],"b7":[["raise","44+, A8s+, A5s-A3s, KTs+, QTs+, JTs, T9s, ATo+, KJo+"]],"b6":[["raise","33+, A2s+, K9s+, Q9s+, J9s+, T9s, ATo+, KJo+, QJo"]],"b5":[["raise","33+, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, A9o+, KTo+, QJo"]],"b4":[["raise","22+, A2s+, K8s+, Q9s+, J9s+, T8s+, 98s, 87s, A8o+, KTo+, QTo+, JTo"]],"b3":[["raise","22+, A2s+, K6s+, Q8s+, J8s+, T8s+, 97s+, 87s, 76s, A5o+, K9o+, QTo+, JTo"]],"b2":[["raise","22+, A2s+, K3s+, Q5s+, J7s+, T7s+, 96s+, 86s+, 75s+, 65s, 54s, A2o+, K8o+, Q9o+, J9o+, T8o+, 98o"]],"b1":[["raise","66+, A8s+, A5s-A4s, KTs+, QJs, ATo+, KJo+"],["limp","55-22, A7s-A6s, A3s-A2s, K9s-K2s, QTs-Q2s, J9s-J3s, T9s-T5s, 98s-95s, 87s-84s, 76s-74s, 65s-63s, 54s-53s, 43s, A9o-A2o, KTo-K4o, QJo-Q6o, JTo-J7o, T9o-T7o, 98o-97o, 87o-86o, 76o-75o, 65o, K3o-K2o, Q5o-Q2o, J6o-J5o, T6o, 96o-95o, 85o, 74o, 64o, 54o, 94s-92s, 83s-82s, 73s, 62s, 52s, 42s, 32s, J2s, T4s-T2s"]]},"short":{"b9":[["shove","44+, A8s+, A5s-A4s, KTs+, QTs+, JTs, ATo+, KJo+"]],"b8":[["shove","33+, A7s+, A5s-A3s, KTs+, QTs+, JTs, ATo+, KJo+"]],"b7":[["shove","22+, A7s+, A5s-A2s, K9s+, QTs+, JTs, T9s, A9o+, KJo+"]],"b6":[["shove","22+, A2s+, K9s+, Q9s+, J9s+, T9s, A9o+, KJo+, QJo"]],"b5":[["shove","22+, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, A7o+, KTo+, QJo"]],"b4":[["shove","22+, A2s+, K7s+, Q9s+, J9s+, T8s+, 98s, A4o+, KTo+, QTo+, JTo"]],"b3":[["shove","22+, A2s+, K6s+, Q8s+, J8s+, T8s+, 98s, A2o+, K9o+, QTo+, JTo"]],"b2":[["shove","22+, A2s+, K2s+, Q5s+, J7s+, T7s+, 97s+, 87s, 76s, A2o+, K6o+, Q8o+, J8o+, T9o"]],"b1":[["shove","22+, A2s+, K2s+, Q2s+, J2s+, T5s+, 95s+, 84s+, 74s+, 63s+, 53s+, 43s, A2o+, K2o+, Q6o+, J7o+, T7o+, 97o+, 87o"]]}},"vsOpen":{"long":{"EP>EP":[["threebet","QQ+, AKs, AKo, A5s"],["call","JJ-77, AQs-AJs, KQs"]],"EP>MP":[["threebet","QQ+, AKs, AKo, A5s-A4s"],["call","JJ-66, AQs-ATs, KQs, KJs, QJs, JTs, AQo"]],"EP>CO":[["threebet","QQ+, AKs, AKo, A5s-A4s"],["call","JJ-55, AQs-ATs, KTs+, QTs+, JTs, T9s, AQo"]],"EP>BTN":[["threebet","QQ+, AKs, AKo, A5s-A3s"],["call","JJ-22, AQs-A9s, KTs+, QTs+, JTs, T9s, 98s, AQo-AJo, KQo"]],"EP>SB":[["threebet","QQ+, AKs, AQs, AKo, A5s-A4s"],["call","JJ-88, AJs, KQs"]],"EP>BB":[["threebet","QQ+, AKs, AQs, AKo, A5s-A4s"],["call","JJ-22, AJs-A2s, K5s+, Q6s+, J7s+, T7s+, 96s+, 86s+, 75s+, 64s+, 53s+, AQo-A8o, K9o+, Q9o+, J9o+, T9o"]],"MP>MP":[["threebet","QQ+, AKs, AQs, AKo, A5s-A4s"],["call","JJ-66, AJs-ATs, KQs, KJs, QJs, JTs, AQo"]],"MP>CO":[["threebet","JJ+, AQs+, AKo, A5s-A4s"],["call","TT-55, AJs-ATs, KTs+, QTs+, JTs, T9s, AQo, KQo"]],"MP>BTN":[["threebet","JJ+, AQs+, AQo+, A5s-A3s"],["call","TT-22, AJs-A6s, KTs+, QTs+, J9s+, T9s, 98s, 87s, AJo, KQo"]],"MP>SB":[["threebet","JJ+, AQs+, AQo+, KQs, A5s-A4s"],["call","TT-77, AJs-ATs"]],"MP>BB":[["threebet","JJ+, AQs+, AQo+, A5s-A3s"],["call","TT-22, AJs-A2s, K2s+, Q5s+, J6s+, T6s+, 96s+, 85s+, 74s+, 64s+, 53s+, 43s, AJo-A5o, K7o+, Q8o+, J8o+, T8o+, 97o+, 87o, Q4s-Q2s, J5s-J4s, T5s, 95s, 84s, 73s, 63s, 52s, 42s"]],"CO>BTN":[["threebet","TT+, AJs+, KQs, AQo+, A5s-A2s, K9s, Q9s"],["call","99-22, ATs-A6s, KJs-KTs, QTs+, J9s+, T8s+, 98s, 87s, 76s, AJo-ATo, KQo, KJo"]],"CO>SB":[["threebet","99+, ATs+, KJs+, QJs, AJo+, KQo, A5s-A2s, K9s-K8s"],["call","88-55, A9s-A8s, KTs, QTs, JTs, T9s"]],"CO>BB":[["threebet","TT+, AJs+, KQs, AQo+, A5s-A2s, K7s-K6s, Q8s"],["call","99-22, ATs-A6s, K2s+, Q2s+, J4s+, T5s+, 95s+, 84s+, 74s+, 63s+, 53s+, 43s, AJo-A2o, K5o+, Q7o+, J7o+, T7o+, 96o+, 86o+, 76o, J3s-J2s, T4s-T2s, 94s-92s, 83s-82s, 73s-72s, 62s, 52s, 42s, 32s"]],"BTN>SB":[["threebet","88+, A8s+, K9s+, Q9s+, J9s+, T9s, ATo+, KJo+, QJo, A5s-A2s, K8s-K6s, 76s, 65s"],["call","77-22, A7s-A6s, 98s, 87s"]],"BTN>BB":[["threebet","99+, ATs+, KJs+, QJs, AJo+, KQo, A5s-A2s, K8s-K6s, Q8s, J8s, 65s, 54s"],["call","88-22, A9s-A6s, K2s+, Q2s+, J2s+, T2s+, 92s+, 82s+, 72s+, 62s+, 52s+, 42s+, 32s, ATo-A2o, K2o+, Q3o+, J5o+, T5o+, 95o+, 85o+, 75o+, 64o+, 54o"]],"SB>BB":[["threebet","99+, ATs+, KTs+, QTs+, JTs, AJo+, KQo, A5s-A2s, K6s-K5s, 76s, 65s"],["call","88-22, A9s-A6s, K9s-K2s, Q9s-Q2s, J4s+, T5s+, 95s+, 84s+, 74s+, 63s+, 53s+, 43s, ATo-A2o, K4o+, Q6o+, J7o+, T7o+, 96o+, 86o+, 75o+, 65o"]],"SBL>BB":[["isoRaise","55+, A2s+, K7s+, Q8s+, J8s+, T8s+, 98s, A7o+, K9o+, QTo+, JTo, K4s-K2s, Q5s-Q2s, J5s-J2s, T5s-T2s, 94s-92s, 83s-82s, 72s, 62s, 52s, 42s, 32s, K8o-K5o, Q9o, J9o, T9o, 98o"]],"HJ>CO":[["threebet","TT+, AJs+, KQs, AQo+, A5s-A3s"],["call","99-44, ATs-A8s, KTs+, QTs+, JTs, T9s, 98s, AJo, KQo"]],"HJ>BTN":[["threebet","TT+, AJs+, KQs, AQo+, A5s-A2s, K9s"],["call","99-22, ATs-A6s, KJs-KTs, QTs+, J9s+, T8s+, 98s, 87s, 76s, AJo-ATo, KQo, KJo"]],"HJ>SB":[["threebet","TT+, ATs+, KJs+, QJs, AJo+, KQo, A5s-A3s, K9s"],["call","99-66, A9s, KTs, QTs, JTs"]],"HJ>BB":[["threebet","TT+, AJs+, KQs, AQo+, A5s-A2s, K7s"],["call","99-22, ATs-A6s, K2s+, Q2s+, J4s+, T5s+, 95s+, 84s+, 74s+, 63s+, 53s+, 43s, AJo-A2o, K5o+, Q8o+, J7o+, T7o+, 97o+, 87o, 76o, J3s-J2s, T4s-T2s, 94s-92s, 83s-82s, 73s-72s, 62s, 52s, 42s, 32s"]]},"medium":{"EP>EP":[["threebetShove","99+, AQs+, AKo"],["call","88-66, AJs, KQs"]],"EP>MP":[["threebetShove","99+, AJs+, AQo+"],["call","88-66, ATs, KQs"]],"EP>CO":[["threebetShove","88+, AJs+, KQs, AQo+"],["call","77-55, ATs, KJs, QJs"]],"EP>BTN":[["threebetShove","88+, ATs+, KQs, AQo+"],["call","77-22, A9s, KJs, QJs, JTs, AJo, KQo"]],"EP>SB":[["threebetShove","77+, ATs+, KQs, AJo+"]],"EP>BB":[["threebetShove","99+, AJs+, AQo+"],["call","88-22, ATs-A2s, K8s+, Q8s+, J8s+, T8s+, 97s+, 87s, 76s, 65s, AJo-A8o, KTo+, QTo+, JTo, K7s-K5s, Q7s, J7s, T7s, 96s, 86s, 75s, 54s, K9o, Q9o, J9o, T9o"]],"MP>MP":[["threebetShove","99+, AJs+, AQo+"],["call","88-66, ATs, KQs"]],"MP>CO":[["threebetShove","88+, ATs+, KQs, AJo+"],["call","77-55, KJs, QJs, JTs"]],"MP>BTN":[["threebetShove","77+, A9s+, KJs+, AJo+, KQo"],["call","66-22, A8s, QJs, JTs, T9s"]],"MP>SB":[["threebetShove","77+, A8s+, KTs+, QJs, ATo+, KQo"]],"MP>BB":[["threebetShove","99+, ATs+, KQs, AQo+"],["call","88-22, A9s-A2s, K6s+, Q7s+, J7s+, T7s+, 96s+, 86s+, 75s+, 65s, 54s, AJo-A5o, KTo+, QTo+, JTo, T9o, K5s-K2s, Q6s-Q4s, J6s, T6s, 95s, 85s, 74s, 64s, 53s, 43s, K9o, Q9o, J9o, T8o, 98o"]],"CO>BTN":[["threebetShove","55+, A7s+, A5s-A4s, KTs+, QJs, ATo+, KQo"],["call","44-22, A6s, QTs, JTs, T9s, 98s"]],"CO>SB":[["threebetShove","55+, A2s+, KTs+, QTs+, JTs, A9o+, KJo+"]],"CO>BB":[["threebetShove","77+, A9s+, KTs+, QJs, ATo+, KQo"],["call","66-22, A8s-A2s, K9s-K2s, QTs-Q4s, J6s+, T6s+, 95s+, 85s+, 74s+, 64s+, 53s+, 43s, A9o-A4o, KJo-K5o, Q8o+, J8o+, T7o+, 97o+, 86o+, 76o, Q3s-Q2s, J5s-J3s, T5s-T4s, 94s, 84s, 73s, 63s, 52s, 42s"]],"BTN>SB":[["threebetShove","33+, A2s+, K7s+, Q9s+, J9s+, T9s, 98s, A5o+, KTo+, QJo"]],"BTN>BB":[["threebetShove","66+, A8s+, A5s-A4s, KTs+, QTs+, JTs, ATo+, KJo+"],["call","55-22, A7s-A6s, A3s-A2s, K9s-K2s, Q9s-Q2s, J9s-J3s, T9s-T4s, 94s+, 84s+, 74s+, 63s+, 53s+, 43s, A9o-A2o, KTo-K5o, QJo-Q7o, J7o+, T7o+, 97o+, 86o+, 76o, 65o, Q6o-Q5o, J6o, T6o, 96o, 85o, 75o, 64o, 54o, 93s-92s, 83s-82s, 73s-72s, 62s, 52s, 42s, 32s, J2s, T3s-T2s"]],"SB>BB":[["threebetShove","55+, A2s+, K9s+, Q9s+, J9s+, T9s, A7o+, A5o, KTo+, QJo"],["call","44-22, K8s-K2s, Q8s-Q2s, J8s-J4s, T8s-T6s, 97s-96s, 87s-85s, 76s-74s, 65s-63s, 54s-53s, 43s, A6o, A4o-A2o, K9o-K5o, QTo-Q7o, JTo-J8o, T9o-T8o, 98o-97o, 87o, 76o"]],"SBL>BB":[["shove","22-99, A2s-AJs, A5o-AJo, K8s-KJs, KTo-KJo, QTs-QJs, JTs, T9s, QJo"],["isoRaise","TT+, AQs+, AQo+, KQs, KQo, K7s-K2s, Q6s-Q2s, J6s-J2s, T6s-T2s, 95s-92s, 84s-82s, 73s-72s, 62s, 52s, 42s, 32s, K9o-K6o, Q9o-Q8o"]],"HJ>CO":[["threebetShove","77+, A9s+, KJs+, AJo+, KQo"],["call","66-44, KTs, QJs, JTs, T9s"]],"HJ>BTN":[["threebetShove","66+, A8s+, A5s-A4s, KTs+, QJs, ATo+, KQo"],["call","55-22, A7s, QTs, JTs, T9s, 98s"]],"HJ>SB":[["threebetShove","66+, A2s+, KTs+, QJs, ATo+, KJo+"]],"HJ>BB":[["threebetShove","88+, ATs+, KQs, AJo+"],["call","77-22, A9s-A2s, K9s-K2s, Q9s-Q4s, J7s+, T7s+, 96s+, 85s+, 74s+, 64s+, 53s+, 43s, ATo-A4o, KQo-K7o, Q8o+, J8o+, T8o+, 98o, 87o"]]},"short":{"EP>EP":[["shove","88+, AJs+, AQo+"]],"EP>MP":[["shove","77+, ATs+, KQs, AJo+"]],"EP>CO":[["shove","77+, ATs+, KQs, AJo+"]],"EP>BTN":[["shove","66+, A9s+, KQs, AJo+, KQo"]],"EP>SB":[["shove","66+, A9s+, KJs+, ATo+, KQo"]],"EP>BB":[["shove","66+, A8s+, KTs+, ATo+, KQo"],["call","55-22, A7s-A2s, K9s-K7s, QTs+, JTs, T9s, 98s, A9o-A7o, KJo-KTo, QJo"]],"MP>MP":[["shove","77+, ATs+, KQs, AJo+"]],"MP>CO":[["shove","66+, A9s+, KJs+, ATo+, KQo"]],"MP>BTN":[["shove","55+, A8s+, KTs+, QJs, ATo+, KQo"]],"MP>SB":[["shove","55+, A7s+, KTs+, QJs, A9o+, KJo+"]],"MP>BB":[["shove","55+, A7s+, KTs+, QJs, A9o+, KQo"],["call","44-22, A6s-A2s, K9s-K5s, Q9s+, J9s+, T8s+, 97s+, 87s, 76s, A8o-A5o, KJo-K9o, QTo+, JTo"]],"CO>BTN":[["shove","44+, A2s+, K9s+, QTs+, JTs, A8o+, KJo+"]],"CO>SB":[["shove","33+, A2s+, K8s+, Q9s+, J9s+, A7o+, KTo+, QJo"]],"CO>BB":[["shove","44+, A2s+, K9s+, QTs+, JTs, A7o+, KJo+"],["call","33-22, K8s-K2s, Q9s-Q2s, J9s-J5s, T6s+, 95s+, 85s+, 74s+, 64s+, 53s+, 43s, A6o-A2o, KTo-K5o, QJo-Q8o, JTo-J8o, T8o+, 98o"]],"BTN>SB":[["shove","22+, A2s+, K5s+, Q8s+, J8s+, T8s+, 98s, A2o+, K9o+, QTo+, JTo"]],"BTN>BB":[["shove","22+, A2s+, K7s+, Q9s+, J9s+, T9s, A5o+, KTo+, QJo"],["call","K6s-K2s, Q8s-Q2s, J8s-J2s, T8s-T3s, 97s-93s, 87s-83s, 76s-73s, 65s-62s, 54s-52s, 43s-42s, 32s, A4o-A2o, K9o-K2o, QTo-Q7o, JTo-J7o, T9o-T7o, 98o-96o, 87o-86o, 76o-75o, 65o"]],"SB>BB":[["shove","22+, A2s+, K5s+, Q8s+, J8s+, T8s+, 98s, A2o+, K9o+, QTo+, JTo"],["call","K4s-K2s, Q7s-Q2s, J7s-J4s, T7s-T6s, 97s-95s, 87s-85s, 76s-74s, 65s-63s, 54s-53s, 43s, K8o-K5o, Q9o-Q7o, J9o-J8o, T9o-T8o, 98o-97o, 87o, 76o"]],"SBL>BB":[["shove","22+, A2s+, K7s+, Q9s+, J9s+, T9s, A5o+, KTo+, QJo"]],"HJ>CO":[["shove","55+, A8s+, KTs+, QJs, ATo+, KQo"]],"HJ>BTN":[["shove","44+, A2s+, KTs+, QJs, A9o+, KJo+"]],"HJ>SB":[["shove","44+, A2s+, K9s+, QTs+, JTs, A8o+, KJo+"]],"HJ>BB":[["shove","44+, A2s+, KTs+, QJs, A8o+, KJo+"],["call","33-22, K9s-K3s, Q9s-Q5s, J9s-J7s, T7s+, 97s+, 86s+, 75s+, 65s, 54s, A7o-A2o, KTo-K7o, QJo-Q9o, JTo-J9o, T9o"]]}},"vs3bet":{"long":{"EP>IP":[["fourbet","QQ+, AKs, AKo"],["call","JJ-99, AQs-AJs, KQs"]],"EP>BL":[["fourbet","QQ+, AKs, AKo"],["call","JJ-88, AQs-AJs, KQs"]],"MP>IP":[["fourbet","QQ+, AKs, AKo, A5s"],["call","JJ-88, AQs-ATs, KQs, KJs, QJs, JTs, AQo"]],"MP>BL":[["fourbet","QQ+, AKs, AKo, A5s"],["call","JJ-77, AQs-ATs, KQs, KJs, QJs, JTs"]],"CO>BTN":[["fourbet","JJ+, AQs+, AQo+, A5s-A4s"],["call","TT-66, AJs-A9s, KTs+, QTs+, JTs, T9s, 98s, AJo, KQo"]],"CO>BL":[["fourbet","JJ+, AQs+, AKo, A5s-A4s"],["call","TT-55, AJs-A8s, KTs+, QTs+, JTs, T9s, AQo"]],"BTN>BL":[["fourbet","TT+, AJs+, KQs, AQo+, A5s-A3s"],["call","99-44, ATs-A6s, KJs-K9s, QTs+, J9s+, T9s, 98s, 87s, 76s, AJo-ATo, KQo, KJo"]],"SB>BB":[["fourbet","TT+, ATs+, KQs, AJo+, A5s-A2s"],["call","99-33, A9s-A6s, KJs-K8s, QTs+, J9s+, T9s, 98s, 87s, 76s, ATo, KQo, KJo"]],"HJ>IP":[["fourbet","JJ+, AQs+, AKo, A5s-A4s"],["call","TT-77, AJs-ATs, KQs, KJs, QJs, JTs, T9s, AQo"]],"HJ>BL":[["fourbet","JJ+, AQs+, AKo, A5s-A4s"],["call","TT-66, AJs-A9s, KTs+, QJs, JTs, T9s, AQo"]]},"medium":{"EP>IP":[["callShove","TT+, AQs+, AKo"]],"EP>BL":[["callShove","99+, AQs+, AKo"]],"MP>IP":[["callShove","99+, AJs+, AQo+"]],"MP>BL":[["callShove","88+, AJs+, KQs, AQo+"]],"CO>BTN":[["callShove","77+, ATs+, KQs, AJo+"]],"CO>BL":[["callShove","77+, ATs+, KQs, AJo+"]],"BTN>BL":[["callShove","55+, A8s+, KTs+, QJs, ATo+, KQo"]],"SB>BB":[["callShove","55+, A7s+, A5s, KTs+, QJs, A9o+, KJo+"]],"HJ>IP":[["callShove","88+, ATs+, KQs, AQo+"]],"HJ>BL":[["callShove","88+, ATs+, KQs, AJo+"]]},"short":null}};
+const NOTES={
+ open:{
+  long:"Рейз 2–2.2 bb. SB: рейз 3–3.5 bb с сильными руками, лимп со средними и слабыми. Всё, что не отмечено, — пас.",
+  medium:"Мин-рейз 2 bb. При 15–22 bb часть открытий CO и BTN (мелкие пары, слабые тузы, средние одномастные коннекторы) выгоднее пушить. SB: рейз 3 bb или лимп.",
+  short:"Только пуш или пас. Солвер из SB часть рук лимпит, здесь SB упрощён до пуш/фолд. При 12–15 bb QQ+ и AK можно открывать мин-рейзом."
+ },
+ vsOpen:{
+  long:"3-бет в позиции ≈ 3× от рейза, из блайндов ≈ 4×. Против 4-бета продолжайте с QQ+ и AK, остальное пас.",
+  medium:"3-бет здесь означает олл-ин (рестил). Колл оставлен для рук, которые хорошо играют на флопе, и для широкой защиты BB.",
+  short:"Пуш или пас. Колл есть только у BB против мин-рейза."
+ },
+ vs3bet:{
+  long:"При 30–40 bb 4-бет равен олл-ину. При 50–60 bb 4-бет до ≈ 2.2× от 3-бета, на пуш соперника коллируйте QQ+ и AK.",
+  medium:"Вы открылись мин-рейзом, соперник пушит. Колл пуша или пас."
+ }
+};
+const NOTE_SBL={
+ long:"SB уравнял. Изо-рейз до ≈ 3.5–4 bb сильными руками и частью слабых одномастных как блефом. Остальное чек.",
+ medium:"SB уравнял. Средние руки пушьте, сильные и часть мусора рейзьте до ≈ 3 bb. Остальное чек.",
+ short:"SB уравнял. Пуш или чек."
+};
+
+/* ===== RANGE PARSER ===== */
+const RK="[AKQJT2-9]";
+function ri(c){return R.indexOf(c);}
+function parseRange(str){
+  const out=new Set(); if(!str) return out;
+  for(let tok of str.split(",")){
+    tok=tok.trim(); if(!tok) continue; let m;
+    if((m=tok.match(new RegExp("^("+RK+")\\1(\\+)?$")))){
+      const r=ri(m[1]); for(let i=(m[2]?0:r);i<=r;i++) out.add(R[i]+R[i]); continue;
+    }
+    if((m=tok.match(new RegExp("^("+RK+")\\1-("+RK+")\\2$")))){
+      let a=ri(m[1]),b=ri(m[2]); if(a>b)[a,b]=[b,a];
+      for(let i=a;i<=b;i++) out.add(R[i]+R[i]); continue;
+    }
+    if((m=tok.match(new RegExp("^("+RK+")("+RK+")([so])?(\\+)?$")))){
+      const h=ri(m[1]),k=ri(m[2]); if(h>=k) throw new Error("bad "+tok);
+      const ts=m[3]?[m[3]]:["s","o"];
+      for(let j=(m[4]?h+1:k);j<=k;j++) for(const t of ts) out.add(R[h]+R[j]+t);
+      continue;
+    }
+    if((m=tok.match(new RegExp("^("+RK+")("+RK+")([so])-("+RK+")("+RK+")([so])$")))){
+      if(m[1]!==m[4]||m[3]!==m[6]) throw new Error("bad "+tok);
+      const h=ri(m[1]); let a=ri(m[2]),b=ri(m[5]); if(a>b)[a,b]=[b,a];
+      if(a<=h) throw new Error("bad "+tok);
+      for(let j=a;j<=b;j++) out.add(R[h]+R[j]+m[3]); continue;
+    }
+    throw new Error("bad token: "+tok);
+  }
+  return out;
+}
+function handAt(i,j){ if(i===j) return R[i]+R[i]; return i<j? R[i]+R[j]+"s" : R[j]+R[i]+"o"; }
+function combos(h){ return h.length===2?6:(h[2]==="s"?4:12); }
+function resolve(chart){
+  const map={}; if(!chart) return map;
+  for(const [a,str] of chart){ for(const h of parseRange(str)) if(!(h in map)) map[h]=a; }
+  return map;
+}
+
+/* ===== UI ===== */
+const PRE={0:[],1:["UTG"],2:["UTG","UTG+1"],3:["UTG","UTG+1","MP"],4:["UTG","UTG+1","UTG+2","MP"]};
+const LATE=["LJ","HJ","CO","BTN","SB","BB"];
+function seatNames(N){return N>=6?PRE[N-6].concat(LATE):LATE.slice(6-N);}
+function nameOf(N,b){return seatNames(N)[N-1-b];}
+function opCls(b){return b>=7?"EP":b>=5?"MP":b===4?"HJ":b===3?"CO":b===2?"BTN":"SB";}
+function heroCls(b){return b>=7?"EP":b>=4?"MP":b===3?"CO":b===2?"BTN":b===1?"SB":"BB";}
+function v3Opts(b){return b===1?["BB"]:b===2?["BL"]:b===3?["BTN","BL"]:["IP","BL"];}
+const DEPTHS={short:{s:"Короткий",l:"< 15 bb"},medium:{s:"Средний",l:"15–30 bb"},long:{s:"Длинный",l:"30–60 bb"}};
+const TABS={open:{s:"Открытие",l:"до меня все сбросили"},vsOpen:{s:"Против открытия",l:"соперник сделал рейз до меня"},vs3bet:{s:"Против 3-бета",l:"я открылся, соперник ответил 3-бетом"}};
+const PLAYERS=[3,4,5,6,7,8,9,10];
+function plural(n){return n+" "+(n>=5?"игроков":"игрока");}
+
+let S={N:9,tab:"open",depth:"long",openB:3,voO:6,voH:0,v3B:3,v3V:"BTN",sel:null};
+try{const s=JSON.parse(localStorage.getItem("pfuni")||"null"); if(s&&typeof s==="object") S=Object.assign(S,s,{sel:null});}catch(e){}
+function save(){try{localStorage.setItem("pfuni",JSON.stringify(S));}catch(e){}}
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+
+function fixState(){
+  if(!PLAYERS.includes(S.N)) S.N=9;
+  const top=S.N-1;
+  S.openB=clamp(+S.openB||3,1,top);
+  if(S.voO!=="SBL"){S.voO=clamp(+S.voO||top,1,top); S.voH=clamp(+S.voH||0,0,S.voO-1);} else S.voH=0;
+  S.v3B=clamp(+S.v3B||3,1,top);
+  if(!v3Opts(S.v3B).includes(S.v3V)) S.v3V=v3Opts(S.v3B)[0];
+}
+
+function btn(id,o,pressed,disabled,onclick){
+  const b=document.createElement("button"); b.type="button"; b.className="btn"; b.id=id;
+  b.setAttribute("aria-pressed",pressed?"true":"false"); if(disabled) b.disabled=true;
+  b.innerHTML='<span class="s"></span>'+(o.l?'<span class="l"></span>':"");
+  b.querySelector(".s").textContent=o.s; if(o.l) b.querySelector(".l").textContent=o.l;
+  b.addEventListener("click",onclick); return b;
+}
+function fill(el,items){el.replaceChildren(...items);}
+function seatLabel(b){const nm=nameOf(S.N,b);return {s:nm,l:b===S.N-1&&b>1?"первый ход":""};}
+function vLabel(v){
+  if(v==="IP") return {s:"Позже меня",l:"до BTN включительно"};
+  if(v==="BL") return {s:"Блайнды",l:"SB или BB"};
+  return {s:v,l:v==="BTN"?"баттон":"большой блайнд"};
+}
+
+function seatsFor(){
+  let hero=[],vill=[];
+  if(S.tab==="open") hero=[S.openB];
+  else if(S.tab==="vsOpen"){hero=[S.voH];vill=[S.voO==="SBL"?1:S.voO];}
+  else{hero=[S.v3B];
+    if(S.v3V==="BL") vill=[1,0]; else if(S.v3V==="BB") vill=[0]; else if(S.v3V==="BTN") vill=[2];
+    else for(let b=2;b<S.v3B;b++) vill.push(b);}
+  return {hero,vill};
+}
+function drawSeats(){
+  const {hero,vill}=seatsFor(); const N=S.N;
+  const W=300,H=176,cx=150,cy=88; const r=N>=9?16:18, fs=N>=9?7.5:8.5;
+  let svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Схема стола на '+N+' мест">';
+  svg+='<ellipse cx="'+cx+'" cy="'+cy+'" rx="104" ry="52" fill="var(--felt)" stroke="var(--felt-line)" stroke-width="2"/>';
+  svg+='<text x="'+cx+'" y="'+(cy+4)+'" text-anchor="middle" font-family="Unbounded, sans-serif" font-size="12" fill="var(--muted)">'+N+'-max</text>';
+  seatNames(N).forEach((nm,i)=>{
+    const b=N-1-i;
+    const ang=Math.PI/2+(i+0.5)*(2*Math.PI/N);
+    const x=cx+126*Math.cos(ang), y=cy+68*Math.sin(ang);
+    const isH=hero.includes(b), isV=vill.includes(b);
+    let f="var(--surface)",st="var(--line)",sw=1.5,tc="var(--fg)";
+    if(isV){f="var(--vill)";st="var(--vill)";tc="#fff";}
+    if(isH){f="var(--accent)";st="var(--accent)";tc="var(--accent-fg)";}
+    svg+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+r+'" fill="'+f+'" stroke="'+st+'" stroke-width="'+sw+'"/>';
+    svg+='<text x="'+x.toFixed(1)+'" y="'+(y+3).toFixed(1)+'" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="'+fs+'" font-weight="700" fill="'+tc+'">'+nm+'</text>';
+  });
+  svg+='</svg>';
+  document.getElementById("seatsvg").innerHTML=svg;
+  document.getElementById("vkey").hidden=(S.tab==="open");
+}
+
+function chartKey(){
+  if(S.tab==="open") return ["open","b"+S.openB];
+  if(S.tab==="vsOpen") return ["vsOpen",(S.voO==="SBL"?"SBL":opCls(S.voO))+">"+heroCls(S.voH)];
+  return ["vs3bet",opCls(S.v3B)+">"+S.v3V];
+}
+function currentChart(){const [t,k]=chartKey();const d=DATA[t][S.depth];return d?d[k]:undefined;}
+
+const gridEl=document.getElementById("grid");
+const cells=[];
+for(let i=0;i<13;i++)for(let j=0;j<13;j++){
+  const c=document.createElement("button"); c.type="button"; c.className="cell"; c.id="c"+i+"_"+j;
+  const h=handAt(i,j); c.textContent=h; c.dataset.h=h;
+  c.addEventListener("click",()=>{S.sel=h;updateInfo();markSel();});
+  c.addEventListener("mouseenter",()=>showInfo(h));
+  c.addEventListener("focus",()=>showInfo(h));
+  gridEl.appendChild(c); cells.push(c);
+}
+gridEl.addEventListener("mouseleave",()=>updateInfo());
+let MAP={};
+function restName(){return (S.tab==="vsOpen"&&S.voO==="SBL")?"Чек":"Пас";}
+function showInfo(h){
+  const a=MAP[h]; const el=document.getElementById("info");
+  el.innerHTML="<b></b> — <span></span>";
+  el.querySelector("b").textContent=h;
+  el.querySelector("span").textContent=a?ACT[a].n:restName();
+}
+function updateInfo(){ if(S.sel) showInfo(S.sel); else document.getElementById("info").textContent="Нажмите на клетку, чтобы увидеть руку и действие"; }
+function markSel(){cells.forEach(c=>c.classList.toggle("sel",c.dataset.h===S.sel));}
+
+function render(){
+  fixState(); save();
+  const N=S.N, top=N-1, seatsDesc=[]; for(let b=top;b>=0;b--) seatsDesc.push(b);
+  fill(document.getElementById("players"),PLAYERS.map(n=>btn("n-"+n,{s:String(n)},S.N===n,false,()=>{S.N=n;render();})));
+  fill(document.getElementById("tabs"),Object.keys(TABS).map(k=>btn("tab-"+k,TABS[k],S.tab===k,false,()=>{S.tab=k;render();})));
+  fill(document.getElementById("depths"),Object.keys(DEPTHS).map(k=>btn("d-"+k,DEPTHS[k],S.depth===k,false,()=>{S.depth=k;render();})));
+  const f1l=document.getElementById("f1l"),f1c=document.getElementById("f1c"),f2=document.getElementById("f2"),f2l=document.getElementById("f2l"),f2c=document.getElementById("f2c");
+  const openers=seatsDesc.filter(b=>b>=1);
+  if(S.tab==="open"){
+    f1l.textContent="Моя позиция";
+    fill(f1c,openers.map(b=>btn("oh-"+b,seatLabel(b),S.openB===b,false,()=>{S.openB=b;render();})));
+    f2.hidden=true;
+  }else if(S.tab==="vsOpen"){
+    f1l.textContent="Кто открыл";
+    const items=openers.map(b=>btn("vo-"+b,seatLabel(b),S.voO===b,false,()=>{S.voO=b;render();}));
+    items.push(btn("vo-SBL",{s:"SB лимп",l:"SB уравнял"},S.voO==="SBL",false,()=>{S.voO="SBL";render();}));
+    fill(f1c,items);
+    f2.hidden=false; f2l.textContent="Моя позиция";
+    const lim=S.voO==="SBL"?1:S.voO;
+    fill(f2c,seatsDesc.map(b=>btn("vh-"+b,seatLabel(b),S.voH===b,b>=lim,()=>{S.voH=b;render();})));
+  }else{
+    f1l.textContent="Моя позиция (я открыл)";
+    fill(f1c,openers.map(b=>btn("th-"+b,seatLabel(b),S.v3B===b,false,()=>{S.v3B=b;render();})));
+    f2.hidden=false; f2l.textContent="Кто сделал 3-бет";
+    fill(f2c,v3Opts(S.v3B).map(v=>btn("tv-"+v,vLabel(v),S.v3V===v,false,()=>{S.v3V=v;render();})));
+  }
+  drawSeats();
+
+  const dep=DEPTHS[S.depth];
+  let title;
+  if(S.tab==="open") title="Открытие с "+nameOf(N,S.openB);
+  else if(S.tab==="vsOpen") title=(S.voO==="SBL"?"SB лимпанул":nameOf(N,S.voO)+" открылся")+", я на "+nameOf(N,S.voH);
+  else title="Я открылся с "+nameOf(N,S.v3B)+", 3-бет: "+vLabel(S.v3V).s.toLowerCase();
+  document.getElementById("ptitle").textContent=title;
+  const meta=document.getElementById("pmeta");
+  meta.innerHTML="<b></b> · стек <b></b> · <span></span>";
+  meta.children[0].textContent=plural(N);
+  meta.children[1].textContent=dep.s.toLowerCase()+", "+dep.l;
+  meta.children[2].textContent=TABS[S.tab].l;
+
+  const chart=currentChart();
+  const area=document.getElementById("chartArea"), legend=document.getElementById("legend"), info=document.getElementById("info"), note=document.getElementById("pnote");
+  if(S.tab==="vs3bet"&&S.depth==="short"){
+    area.querySelector(".gridbox").hidden=true;
+    let e=document.getElementById("emptyMsg");
+    if(!e){e=document.createElement("div");e.id="emptyMsg";e.className="empty";
+      e.innerHTML="<p><b>С коротким стеком 3-бет на ваше открытие не возникает.</b></p><p>При стеке меньше 15 bb вы открываетесь пушем, поэтому соперник может только заколлировать или сбросить. Используйте таблицу «Открытие → Короткий».</p>";
+      area.appendChild(e);}
+    e.hidden=false; legend.replaceChildren(); info.hidden=true; note.hidden=true; return;
+  }
+  const e=document.getElementById("emptyMsg"); if(e) e.hidden=true;
+  area.querySelector(".gridbox").hidden=false; info.hidden=false; note.hidden=false;
+
+  MAP=resolve(chart);
+  const tot={}; let foldC=1326;
+  cells.forEach(c=>{
+    const a=MAP[c.dataset.h]; c.className="cell"+(a?" "+ACT[a].c:"");
+    if(a){tot[a]=(tot[a]||0)+combos(c.dataset.h); foldC-=combos(c.dataset.h);}
+    c.setAttribute("aria-label",c.dataset.h+": "+(a?ACT[a].n:restName()));
+  });
+  markSel(); updateInfo();
+  const items=(chart||[]).map(([a])=>a).filter((a,i,arr)=>arr.indexOf(a)===i).map(a=>[ACT[a].n,ACT[a].c,tot[a]||0]);
+  items.push([restName(),"fold",foldC]);
+  legend.replaceChildren(...items.map(([n,c,k])=>{
+    const d=document.createElement("div"); d.className="it";
+    d.innerHTML='<span class="sw '+c+'"></span><span></span><span class="n"></span>';
+    d.children[1].textContent=n;
+    d.children[2].textContent=(k/1326*100).toFixed(1).replace(".",",")+"% · "+k+" комб.";
+    return d;
+  }));
+  let txt=(S.tab==="vsOpen"&&S.voO==="SBL")?NOTE_SBL[S.depth]:NOTES[S.tab][S.depth];
+  if(N<=4) txt+=" За столом на "+N+" игроков обычно идёт финальная стадия: с учётом ICM коллы олл-инов заметно уже.";
+  note.textContent=txt;
+}
+render();
+</script>
+</body>
+</html>
